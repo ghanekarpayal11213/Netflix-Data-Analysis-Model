@@ -1,0 +1,286 @@
+#import libraries
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+library(lubridate)
+library(stringr)
+library(janitor)
+library(showtext)
+library(ranger)
+
+#PHASE1
+#DATA COLLECTION
+
+#read the file on which we have to perform analysis
+data<-read_csv('C:/Users/lenovo/images/Downloads/archive (1).zip')
+view(data)
+head(data)
+glimpse(data)
+summary(data)
+
+#Phase2
+#TRAINING & TESTING DATA
+
+# Set the seed for reproducibility
+set.seed(123)
+
+# Create a sample vector with 70% of the data for training and 30% for testing
+sample_vector <- sample(c(TRUE, FALSE), nrow(data), replace = TRUE, prob = c(0.7, 0.3))
+
+# Create the training dataset
+training_data <- data[sample_vector, ]
+
+# Create the testing dataset
+testing_data <- data[!sample_vector, ]
+
+#Phase3
+#DATA CLEANING
+
+# Check for missing values
+sum(is.na(data_clean))
+
+# Remove rows with missing values in the duration column
+data_clean <- data[!is.na(data$duration),]
+
+# data filter
+data_filtered <- data_clean[data_clean$date_added >= "2021-08-24", ]
+
+# Check for missing values again
+summary(data)
+
+
+#Phase4
+#STATICAL ANALYSIS
+#Cal Mean Meadian Mode
+
+# Convert duration to numeric
+data$duration <- as.numeric(as.character(gsub("min", "", data$duration)))
+
+#mean
+mean_duration <- mean(data$duration, na.rm = TRUE)
+
+#calculate median
+median_duration <- median(data$duration, na.rm = TRUE)
+
+#calculate mode
+# Create a table of frequencies
+freq_table <- table(data$duration)
+# Get the mode (the value with the highest frequency)
+mode_duration <- names(which.max(freq_table))
+
+#Phase5
+#EXPLORATORY DATA ANALYSIS
+
+#Let us determine whether Netflix has been more focused on TV shows or movies.
+type_movie<-data%>%filter(type=='Movie')
+type_tv<-data%>%filter(type=='TV Show')
+ggplot()+geom_bar(data,mapping = aes(type,fill=type))+scale_fill_manual(values = c("#9E9AC8", "#6A51A3"))
+
+
+#Top nations that Netflix targets with its movies and TV shows.
+
+#Top 10 countries for movies
+#First, we will create a new dataframe for just movies
+movies <- data%>%
+filter(type == "Movie")%>%
+filter(country!="")%>%
+group_by(country)%>%
+summarize(number =n())%>%
+arrange(desc(number))%>%
+slice(1:10)
+
+head(movies)
+
+## Next, we will create a bar chart to visualize the above dataframe
+
+ggplot(data = movies, aes(x = reorder(country,- number), y = number)) + geom_col(fill = "dark blue") + 
+labs(title = 'Top ten countries - Movies') + 
+xlab("Country")+
+ylab("Number of Movies")+
+theme(plot.title = element_text(40),axis.title.x = element_text(30)
+      ,axis.title.y = element_text(30),panel.background = element_blank()
+      ,axis.text.x = element_text(20, angle = 45))
+
+#lets determine the top 10 countries for TV shows
+
+TVshows <- data%>%
+filter(type == "TV Show")%>%
+filter(country!="")%>%
+group_by(country)%>%
+summarize(number = n())%>%
+arrange(desc(number))%>%
+slice(1:10)
+
+head(TVshows)
+
+ggplot(data = TVshows, aes(x = reorder(country,- number), y = number)) + geom_col(fill = "dark blue") + 
+labs(title = 'Top ten countries - TV Shows') + 
+xlab("Country")+
+ylab("Number of TV Shows")+
+theme(plot.title = element_text(40),axis.title.x = element_text(30)
+      ,axis.title.y = element_text(30),panel.background = element_blank()
+      ,axis.text.x = element_text(20, angle = 45))
+     
+     
+#Compare ratings of Movies and TVShows.
+
+ggplot(data=data,aes(x=rating, fill=type))+geom_bar(position=position_dodge())+
+labs(title='Ratings - Movies vs TV Shows')+
+xlab("Rating")+
+ylab("Count")+
+theme(panel.background = element_blank()
+,plot.title=element_text(40)
+,axis.title.x=element_text(30)
+,axis.title.y=element_text(30)
+,axis.text.x=element_text(20, angle = 90)
+,axis.text.y=element_text(20))+
+scale_fill_manual(breaks =c("Movie","TV Show"),
+                 values=c("navy blue", "light blue"))
+
+
+#Duration of Movies over the year
+
+#I have to remove "min" under the duration column to find the average duration of movies per year
+data$duration<-gsub("min","",as.character(data$duration))
+# View dataset to make sure "min" hasbeen dropped  
+head(data)
+#Now I can calculate average and plot 
+data%>%
+filter(type == "Movie")%>%
+filter(duration != "")%>%
+group_by(release_year)%>%
+summarize(avg_duration = mean(as.numeric(as.character(duration), na.rm = TRUE)))%>%
+ggplot(aes(x=release_year, y = avg_duration)) +geom_line(col = 'dark blue') +
+labs(title = 'Duration of Movies Over the Years') +
+xlab('Year')+
+ylab('Duration')+
+theme(panel.background =element_blank()
+      ,plot.title = element_text(40)
+      ,axis.text.x = element_text(20,angle=90)
+      ,axis.text.y = element_text(20)
+      ,axis.title.x = element_text(30)
+      ,axis.title.y = element_text(30))
+      
+    
+#5 Most Popular Genres
+data %>% 
+  group_by(listed_in) %>% 
+  summarise(Movies = n()) %>% 
+  arrange(desc(Movies)) %>% 
+  head(5) %>% 
+   ggplot(aes(
+    x = reorder(listed_in, -Movies),
+    y = Movies,
+    fill = ifelse(Movies == max(Movies), "red", "black"))) +
+  geom_col() +
+  labs(title = "Most Popular Genres") +
+  theme_minimal() +
+  scale_fill_manual(values = c( "#2d2d2d", "#E50914")) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(
+      size = 15,
+      colour = "#E50914"
+    ),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    text = element_text(size = 10))
+    
+#PHASE6
+#PREDICTIONS
+#MODEL TRAINING 
+# Ensure all categorical variables have at least two levels
+data_clean$type <- factor(data_clean$listed_in)
+data_clean$rating <- factor(data_clean$rating)
+
+# Remove levels with zero count
+# Ensure 'listed_in' is a factor
+data_clean$listed_in <- factor(data_clean$listed_in)
+
+# Remove levels with zero count
+data_clean$listed_in <- droplevels(data_clean$listed_in)
+data_clean$rating <- droplevels(data_clean$rating)
+
+
+# Define factor levels
+listed_in_levels <- levels(data_clean$listed_in)
+rating_levels <- levels(data_clean$rating)
+
+
+# Filter rows for type with more than one level
+data_clean <- data_clean[data_clean$type %in% listed_in_levels[table(data_clean$listed_in) > 0], ]
+
+# Filter rows for rating with more than one level
+data_clean <- data_clean[data_clean$rating %in% rating_levels[table(data_clean$rating) > 0], ]
+
+
+# Re-check factor levels
+data_clean$listed_in <- droplevels(data_clean$listed_in)
+data_clean$rating <- droplevels(data_clean$rating)
+
+# Remove empty levels from factors
+data_clean$listed_in <- droplevels(data_clean$listed_in)
+data_clean$rating <- droplevels(data_clean$rating)
+
+
+# Create dummy variables and combine with continuous variable (duration)
+dummy_matrix <- model.matrix(~ listed_in + rating - 1, data = data_clean, contrasts.arg = list(listed_in = "contr.treatment", rating = "contr.treatment"))
+
+X_train <- cbind(dummy_matrix, duration = data_clean$duration)
+
+y_train <- as.numeric(data_clean$duration)
+class(y_train)
+
+# Train the random forest model using ranger
+model <- ranger::ranger(formula = y_train ~ ., data = data.frame(X_train), num.trees = 500, mtry = 5)
+
+# Summary of the model
+print(model)
+
+
+#Model testing predictions
+# Ensure all categorical variables have at least two levels
+testing_data$listed_in <- factor(testing_data$listed_in)
+testing_data$rating <- factor(testing_data$rating)
+
+# Remove levels with zero count
+testing_data$listed_in <- droplevels(testing_data$listed_in)
+testing_data$rating <- droplevels(testing_data$rating)
+
+# Create dummy variables for the testing data
+dummy_matrix_test <- model.matrix(~ listed_in + rating - 1, data = testing_data, 
+                                  contrasts.arg = list(listed_in = "contr.treatment", rating = "contr.treatment"))
+
+# Combine the dummy variables with the continuous variable (duration)
+X_test <- cbind(dummy_matrix_test, duration = testing_data$duration)
+
+# Ensure X_test is a data frame
+X_test <- data.frame(X_test)
+
+# Align columns of X_test to match those in X_train
+# Find missing columns in X_test that are in X_train
+missing_cols <- setdiff(colnames(X_train), colnames(X_test))
+# Add missing columns to X_test with default value 0
+for (col in missing_cols) {
+  X_test[[col]] <- 0
+}
+#predict
+predictions <- predict(model, data = X_test)
+
+
+# Extract the predictions from the ranger prediction object
+predicted_values <- predictions$predictions
+
+# Print the predictions
+print(predicted_values)
+
+# Optionally, evaluate the model
+y_test <- as.numeric(testing_data$duration)
+mse <- mean((predicted_values - y_test)^2)
+print(paste("Mean Squared Error:", mse))
+
+
+
+
+
